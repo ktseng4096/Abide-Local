@@ -70,10 +70,10 @@ library(DT)
 
 #mongoDB connection
 m1 <- mongo(collection = "accounts", 
-            url = "mongodb://YjQwY2Q0OTdlYTEwOTE3YmEyNjEyNzdlZmY2OWUwODMK:NzU2YWY0MTRlZTAyMjg4YjRkZjYzNGY4MGEwMjk3ZjYK@10.128.0.12,10.128.0.13,10.128.0.14/prayer?replicaSet=ABIDEDB")
+            url = "mongodb://abcd:abcd@10.128.0.12,10.128.0.13,10.128.0.14/prayer?replicaSet=ABIDEDB")
 
 d1 <- mongo(collection = "devices", 
-            url = "mongodb://YjQwY2Q0OTdlYTEwOTE3YmEyNjEyNzdlZmY2OWUwODMK:NzU2YWY0MTRlZTAyMjg4YjRkZjYzNGY4MGEwMjk3ZjYK@10.128.0.12,10.128.0.13,10.128.0.14/prayer?replicaSet=ABIDEDB")
+            url = "mongodb://abcd:abcd@10.128.0.12,10.128.0.13,10.128.0.14/prayer?replicaSet=ABIDEDB")
 ```
 
 ```{r echo=FALSE, warning=FALSE, message=FALSE}
