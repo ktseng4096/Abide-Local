@@ -1,0 +1,294 @@
+---
+title: "Search Ads Performance Report"
+author: "KT"
+date: "Generated: `r format(Sys.time(), '%B %d, %Y')`"
+output: 
+  slidy_presentation: 
+  html_document: 
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+#manually inputed values
+#File Location
+filename <- 'C:/Users/kevin/Desktop/Abide/searchAds.json'
+#Analysis starting date
+start_date <- '2018-09-01'
+#Analysis ending date
+end_date <- '2018-09-30'
+#Number of campaigns to display in output, too many displayed will make the chart difficult to read
+num_top_campaigns <- 15
+#Number of keywords to display in output
+num_top_keywords <- 25
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+#notes 
+#2.0 Changes
+#1)  Included devices data (users that download but did not create an account)
+#2)  Make charts more interactive
+#3)  Right justify the % column
+#4)  Add a check that ensures subscribe date is after click date
+#5)  Minor bug/data descrepency fixes 
+
+#low conversion
+
+#Hypothesis for dropoff
+#Null: only 36% conversion from downloads to account
+#- download to account ratio follows in line with account to subscribe ratio
+
+#Add devices data
+
+#Further analysis: conversions of downloads from devices to accounts to subs with and without ads
+
+#Avg. Time from signup to conversion
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+#library loads
+library(data.table)
+library(readr)
+library(dplyr)
+library(VIF)
+library(usdm)
+library(AER)
+library(foreign)
+library(jsonlite)
+library(shiny)
+library(ggplot2)
+library(knitr)
+library(mongolite)
+library(scales)
+library(DT)
+```
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+#Load json file
+#m1 <- fromJSON(filename)
+
+#mongoDB connection
+#m1 <- mongo(collection = "accounts", 
+#            url = "mongodb://abcd:abcd@10.128.0.12,10.128.0.13,10.128.0.14/prayer?replicaSet=ABIDEDB")
+#
+#d1 <- mongo(collection = "devices", 
+#            url = "mongodb://abcd:abcd@10.128.0.12,10.128.0.13,10.128.0.14/prayer?replicaSet=ABIDEDB")
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+df <- m1$find('{"appleAdAttrib.iad-attribution" : "true"}', 
+              field = '{"_id":1,
+                        "appleAdAttrib":1,
+                        "itunesSubscription.firstSubscribedAt":1,
+                        "stripeSubscription.firstSubscribedAt":1
+}')
+```
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+dfa <- d1$find('{"appleAdAttrib.iad-attribution" : "true"}', 
+              field = '{"appleAdAttrib":1,
+                        "accountId":1,
+                        "kind":1
+}')
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+#convert nested df to to a flattened df
+df = flatten(df)
+dfa = flatten(dfa)
+#replace . with _ in column names
+names(df) <- gsub("\\.", "_", names(df))
+names(df) <- gsub("\\-", "_", names(df))
+names(dfa) <- gsub("\\.", "_", names(dfa))
+names(dfa) <- gsub("\\-", "_", names(dfa))
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+#Conversion Column
+df$converted <- (!is.na(df$itunesSubscription_firstSubscribedAt) | !is.na(df$stripeSubscription_firstSubscribedAt))
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+# remove devices from dfa that have an account associated with it
+dfa <- dfa[is.na(dfa$accountId),]
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+#Format Date Columns
+df$appleAdAttrib_iad_purchase_date <- strtrim(df$appleAdAttrib_iad_purchase_date , 10)
+df$appleAdAttrib_iad_purchase_date  <- as.Date(df$appleAdAttrib_iad_purchase_date)
+df$itunesSubscription_firstSubscribedAt <- strtrim(df$itunesSubscription_firstSubscribedAt, 10)
+df$itunesSubscription_firstSubscribedAt <- as.Date(df$itunesSubscription_firstSubscribedAt)
+df$stripeSubscription_firstSubscribedAt <- strtrim(df$stripeSubscription_firstSubscribedAt, 10)
+df$stripeSubscription_firstSubscribedAt <- as.Date(df$stripeSubscription_firstSubscribedAt)
+df$appleAdAttrib_iad_click_date <- strtrim(df$appleAdAttrib_iad_click_date, 10)
+df$appleAdAttrib_iad_click_date <- as.Date(df$appleAdAttrib_iad_click_date)
+
+dfa$appleAdAttrib_iad_click_date <- strtrim(dfa$appleAdAttrib_iad_click_date, 10)
+dfa$appleAdAttrib_iad_click_date <- as.Date(dfa$appleAdAttrib_iad_click_date)
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+#add missing columns
+dfa$converted <- FALSE
+dfa$`_id` <- NA
+#drop extra columns
+dfa$accountId <- NULL
+dfa$kind_platform <- NULL
+dfa$kind_version <- NULL
+df$itunesSubscription_firstSubscribedAt <- NULL
+df$stripeSubscription_firstSubscribedAt <- NULL
+df$appleAdAttrib_iad_creative_id <- NULL
+df$appleAdAttrib_iad_creative_name <- NULL
+#merge data sets
+df <- rbind(df, dfa)
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+#df of selected dates
+df1 <- df[df$appleAdAttrib_iad_click_date >= start_date & df$appleAdAttrib_iad_click_date <= end_date,]
+dfa <- dfa[dfa$appleAdAttrib_iad_click_date >= start_date & dfa$appleAdAttrib_iad_click_date <= end_date,]
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+num_downloads <- nrow(df1)
+search_match <- nrow(df1[which(df1$appleAdAttrib_iad_keyword_matchtype == 'Search Match'),])
+broad_match <- nrow(df1[which(df1$appleAdAttrib_iad_keyword_matchtype == 'Broad'),])
+redownload <- nrow(df1[which(df1$appleAdAttrib_iad_conversion_type == 'Redownload'),])
+download <- nrow(df1[which(df1$appleAdAttrib_iad_conversion_type == 'Download'),])
+devices <- nrow(dfa)
+accounts <- nrow(df1) - nrow(dfa)
+```
+
+#Overview for Reporting Period `r start_date` to `r end_date`
+
+*Number of Downloads with Ad Click:* `r num_downloads`
+
+*Number of Devices without Accounts with Ad Click:* `r devices`
+
+*Number of Accounts with Ad Click:* `r accounts`
+
+*Search Match Hits (keyword unknown):* `r search_match` 
+
+*Broad Match Hits:* `r broad_match`
+
+
+####Conversion Type as assigned by Apple
+*Redownloads:* `r redownload`
+
+*Downloads:* `r download`
+
+
+#Campaign Conversions
+
+**Description:**  Top performing campaigns based off of the number of downloads.
+
+*Reporting Period:* `r start_date` to `r end_date`
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, out.width = "63%"}
+table1 <- table(df1$appleAdAttrib_iad_campaign_name, df1$converted)
+df_table1 <- as.data.frame.matrix(table1) 
+df_table1$campaign <- row.names(df_table1)
+df_table1$total <- df_table1$'FALSE' + df_table1$'TRUE'
+df_table1 = df_table1[order(df_table1$'TRUE', decreasing = TRUE),]
+df_table1 <- top_n(df_table1, num_top_campaigns)
+df_table1 <- melt(df_table1, id.var=c('campaign', 'total'))
+ggplot(df_table1, aes(x=factor(campaign, levels = rev(unique(campaign))), y=value, fill=variable)) + 
+  geom_bar(stat = 'identity') + 
+  coord_flip() +
+  geom_text(aes(label=ifelse(value > 50, value, "")), position = position_stack(vjust=0.5)) + 
+  labs(y = 'Number of downloads', x = 'Campaign Name', fill = 'Subscribed : ') +
+  theme(legend.position = "top", axis.text=element_text(size=10), legend.title = element_text(size=14), axis.title = element_text(face='bold'))
+```
+
+**Campaign Conversions**
+**Description:** Top performing campaigns excluding 'Christian authors & keywords US 25+'
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, out.width = "63%"}
+df_table2 <- df_table1[!grepl("Christian authors & keywords US 25+", df_table1$campaign),]
+ggplot(df_table2, aes(x=factor(campaign, levels = rev(unique(campaign))), y=value, fill=variable)) + 
+  geom_bar(stat = 'identity') + 
+  coord_flip() +
+  geom_text(aes(label=ifelse(value > 0, value, "")), position = position_stack(vjust=0.5)) + 
+  labs(y = 'Number of downloads', x = 'Campaign Name', fill = 'Subscribed : ') +
+  theme(legend.position = "top", axis.text=element_text(size=10), legend.title = element_text(size=14), axis.title = element_text(face='bold'))
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+df_table_a <- as.data.frame.matrix(table1) 
+colnames(df_table_a) <- c('Not Subscribed', 'Subscribed')
+df_table_a$'Subscriber %' <- percent(df_table_a$Subscribed/(df_table_a$`Not Subscribed` + df_table_a$Subscribed), accuracy = 0.01)
+
+df_table_a <- df_table_a[order(-df_table_a$Subscribed),]
+datatable(df_table_a)
+
+```
+
+
+
+# Keyword Conversions
+
+**Description:**  Top performing keywords based off of the number of downloads.
+
+*Reporting Period:* `r start_date` to `r end_date`
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, out.width = "63%"}
+table1 <- table(df1$appleAdAttrib_iad_keyword, df1$converted)
+df_table1 <- as.data.frame.matrix(table1) 
+df_table1$keyword <- row.names(df_table1)
+df_table1$total <- df_table1$'FALSE' + df_table1$'TRUE'
+df_table1 = df_table1[order(df_table1$'TRUE', decreasing = TRUE),]
+df_table1 <- top_n(df_table1, num_top_keywords)
+df_table1 <- melt(df_table1, id.var=c('keyword', 'total'))
+ggplot(df_table1, aes(x=factor(keyword, levels = rev(unique(keyword))), y=value, fill=variable)) + 
+  geom_bar(stat = 'identity') + 
+  coord_flip() +
+  geom_text(aes(label=ifelse(value > 0, value, "")), position = position_stack(vjust=0.5)) + 
+  labs(y = 'Number of downloads', x = 'Keyword', fill = 'Subscribed : ') +
+  theme(legend.position = "top", axis.text=element_text(size=10), legend.title = element_text(size=14), axis.title = element_text(face='bold'))
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+df_table_a <- as.data.frame.matrix(table1) 
+colnames(df_table_a) <- c('Not Subscribed', 'Subscribed')
+df_table_a$'Subscriber %' <- percent(df_table_a$Subscribed/(df_table_a$`Not Subscribed` + df_table_a$Subscribed), accuracy = 0.01)
+
+df_table_a <- df_table_a[order(-df_table_a$Subscribed),]
+datatable(df_table_a)
+```
+
+
+# Low Conversion Keywords
+
+**Description:**  Keywords with the most downloads that do not have a conversion in the specified time period.
+
+*Reporting Period:* `r start_date` to `r end_date`
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, out.width = "63%"}
+df_table1 <- as.data.frame.matrix(table1) 
+df_table1$keyword <- row.names(df_table1)
+df_table1$total <- df_table1$'FALSE' + df_table1$'TRUE'
+df_table1 <- df_table1 %>%
+         filter(df_table1$'TRUE'<1)
+df_table1 <- df_table1[order(df_table1$'FALSE', decreasing = TRUE),]
+df_table1 <- top_n(df_table1, num_top_keywords)
+df_table1 <- melt(df_table1, id.var=c('keyword', 'total'))
+ggplot(df_table1, aes(x=reorder(keyword, value), y=value, fill=variable)) + 
+  geom_bar(stat = 'identity') + 
+  coord_flip() +
+  geom_text(aes(label=ifelse(value > 0, value, "")), position = position_stack(vjust=0.5)) + 
+  labs(y = 'Number of downloads', x = 'Keyword', fill = 'Subscribed : ') +
+  theme(legend.position = "top", axis.text=element_text(size=10), legend.title = element_text(size=14), axis.title = element_text(face='bold'))
+```
+
+*Includes keywords in the above chart as well as keywords with a less than 5% conversion rate in the given time period*
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+df_table_a <- as.data.frame.matrix(table1) 
+colnames(df_table_a) <- c('Not Subscribed', 'Subscribed')
+df_table_a$'Subscriber %' <- (df_table_a$Subscribed/(df_table_a$`Not Subscribed` + df_table_a$Subscribed))
+df_table_a <- df_table_a[(df_table_a$`Subscriber %` < 0.05),]
+df_table_a$`Subscriber %` <- percent(df_table_a$`Subscriber %`, accuracy =0.01)
+df_table_a <- df_table_a[order(-df_table_a$'Not Subscribed'),]
+datatable(df_table_a)
+```
